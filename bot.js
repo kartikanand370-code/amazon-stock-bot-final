@@ -6,7 +6,8 @@ const express = require('express');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 10000; // 10 Seconds
+const CHECK_INTERVAL = 15000; // 15 Seconds Stock Check
+const RENDER_URL = 'https://amazon-stock-bot-final.onrender.com/'; // 🔥 Aapka Render URL locked!
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -25,6 +26,13 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Amazon Secure Bot is Live!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
+// 🔥 WATERPROOF SELF-PING (HAR 30 SECOND MEIN SERVER KO JHATKA DEGA)
+setInterval(() => {
+    axios.get(RENDER_URL)
+        .then(() => console.log('⚡ Self-Awake: Server ko sone nahi diya!'))
+        .catch((err) => console.log('Ping skip, agle 30s loop me check hoga.'));
+}, 30000); // Strict 30 Seconds!
+
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     const userId = ctx.from.id.toString();
@@ -37,26 +45,26 @@ bot.on('callback_query', async (ctx) => {
             const removedItem = activeUsers[chatId][index];
             clearInterval(removedItem.interval);
             activeUsers[chatId].splice(index, 1);
-            await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑");
+            await ctx.answerCbQuery("Tracking band kar di gayi hai! 🛑").catch(() => {});
             return ctx.reply(`🛑 Tracking stopped for:\n${removedItem.url}`, { disable_web_page_preview: true });
         } else {
-            return ctx.answerCbQuery("⚠️ Already stopped.");
+            return ctx.answerCbQuery("⚠️ Already stopped.").catch(() => {});
         }
     }
 
-    if (userId !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("Unauthorized!");
+    if (userId !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("Unauthorized!").catch(() => {});
     const targetUserId = data.split('_')[1];
     
     if (data.startsWith('approve_')) {
         if (!global.amazonApprovedList.includes(targetUserId.toString())) {
             global.amazonApprovedList.push(targetUserId.toString());
         }
-        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved!**`);
-        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
+        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved!**`).catch(() => {});
+        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`").catch(() => {});
     } else if (data.startsWith('decline_')) {
-        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`);
+        await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`).catch(() => {});
     }
-    await ctx.answerCbQuery();
+    await ctx.answerCbQuery().catch(() => {});
 });
 
 bot.start((ctx) => {
@@ -72,7 +80,7 @@ bot.start((ctx) => {
     bot.telegram.sendMessage(ADMIN_CHAT_ID, 
         `🚨 **New Amazon Bot Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Approve manually:\n\`/approve ${userId}\``,
         Markup.inlineKeyboard([[Markup.button.callback('Approve ✅', `approve_${userId}`), Markup.button.callback('Decline ❌', `decline_${userId}`)]])
-    );
+    ).catch(() => {});
 });
 
 bot.command('approve', (ctx) => {
@@ -84,7 +92,7 @@ bot.command('approve', (ctx) => {
     if (!global.amazonApprovedList.includes(targetUserId)) {
         global.amazonApprovedList.push(targetUserId);
         ctx.reply(`✅ User ID \`${targetUserId}\` ko successfully approve kar diya gaya hai.`);
-        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
+        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`").catch(() => {});
     } else {
         ctx.reply("⚠️ Yeh user pehle se approved hai.");
     }
@@ -118,7 +126,7 @@ bot.command('remove_user', (ctx) => {
             delete activeUsers[targetUserId];
         }
         ctx.reply(`✅ User ID ${targetUserId} remove ho gaya.`);
-        bot.telegram.sendMessage(targetUserId, "🔒 Admin ne aapka access remove kar diya hai.");
+        bot.telegram.sendMessage(targetUserId, "🔒 Admin ne aapka access remove kar diya hai.").catch(() => {});
     } else { ctx.reply("⚠️ ID nahi mili."); }
 });
 
@@ -178,9 +186,9 @@ async function checkAmazonStock(ctx, chatId, targetUrl) {
         if (!availabilityText.includes('currently unavailable') && (availabilityText.includes('in stock') || addToCartBtn > 0)) {
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai Amazon pr stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
-            );
+            ).catch(e => console.log("Notification speed buffer handled."));
         }
     } catch (e) { console.log(`[Amazon Bypass] Error or timeout, retrying...`); }
 }
 
-bot.launch().then(() => console.log("Amazon Admin-Locked Bot Online..."));
+bot.launch().then(() => console.log("Amazon 24/7 Self-Awake Bot Online..."));
