@@ -1,7 +1,7 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const express = require('express'); // Render web service ke liye zaroori hai
+const express = require('express');
 
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
@@ -12,13 +12,15 @@ const CHECK_INTERVAL = 30000;
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 const approvedUsers = new Set([ADMIN_CHAT_ID.toString()]);
+// Users ke details save rakhne ke liye taaki list mein naam dikha sakein
+const userNames = { [ADMIN_CHAT_ID.toString()]: "Admin (Aap)" };
 
 const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept-Language': 'en-US,en;q=0.9'
 };
 
-// Render par Timeout / Port Errors ko rokne ke liye Dummy Web Server
+// Render Timeout Prevention Server
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Bot is strictly alive and running!'));
@@ -28,12 +30,19 @@ app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 bot.use(async (ctx, next) => {
     if (!ctx.from) return;
     const userId = ctx.from.id.toString();
+    
+    // Agar user approved hai, toh aage badhne do
     if (approvedUsers.has(userId) || (ctx.callbackQuery && ctx.from.id.toString() === ADMIN_CHAT_ID.toString())) {
         return next();
     }
+    
     if (ctx.message && ctx.message.text === '/start') {
-        const name = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim();
+        const name = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 'No Name';
         const username = ctx.from.username ? `@${ctx.from.username}` : 'No Username';
+        
+        // Name ko save kar lete hain future ke liye
+        userNames[userId] = name;
+        
         ctx.reply("🔒 Access Denied! Aapka request Admin ke paas approval ke liye bhej diya gaya hai. Kripya thoda wait karein...");
         return bot.telegram.sendMessage(ADMIN_CHAT_ID, 
             `🚨 **New Access Request!**\n\n👤 Name: ${name}\n🆔 ID: ${userId}\n🌐 Username: ${username}`,
@@ -46,6 +55,7 @@ bot.use(async (ctx, next) => {
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("Unauthorized!");
+    
     const targetUserId = data.split('_')[1];
     if (data.startsWith('approve_')) {
         approvedUsers.add(targetUserId.toString());
@@ -58,6 +68,68 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery();
 });
 
+// --- ADMIN CONTROL COMMANDS ---
+
+// 1. Approved Users ki list dekhna (SIRF ADMIN KE LIYE)
+bot.command('list_users', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("❌ Yeh command sirf Admin use kar sakta hai!");
+    }
+    
+    if (approvedUsers.size <= 1) {
+        return ctx.reply("👥 Abhi aapke alawa koi bhi user approved nahi hai.");
+    }
+    
+    let msg = "👥 **Approved Users List:**\n\n";
+    let count = 1;
+    
+    approvedUsers.forEach((userId) => {
+        if (userId !== ADMIN_CHAT_ID.toString()) {
+            const name = userNames[userId] || "Unknown User";
+            msg += `${count}. 👤 **${name}**\n🆔 ID: \`${userId}\`\n\n`;
+            count++;
+        }
+    });
+    
+    msg += "ℹ️ Kisi ko nikaalne ke liye use karein:\n`/remove_user <User_ID>`";
+    ctx.reply(msg, { parse_mode: 'Markdown' });
+});
+
+// 2. User ko remove karna (SIRF ADMIN KE LIYE)
+bot.command('remove_user', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("❌ Yeh command sirf Admin use kar sakta hai!");
+    }
+    
+    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
+    if (args.length < 2) {
+        return ctx.reply("⚠️ Sahi format use karein bhai:\n`/remove_user <User_ID>`");
+    }
+    
+    const targetUserId = args[1].trim();
+    
+    if (targetUserId === ADMIN_CHAT_ID.toString()) {
+        return ctx.reply("⚠️ Bhai aap khud ko block nahi kar sakte!");
+    }
+    
+    if (approvedUsers.has(targetUserId)) {
+        const name = userNames[targetUserId] || "User";
+        approvedUsers.delete(targetUserId);
+        
+        // Agar uski koi tracking chal rahi hai toh use bhi clear karo
+        if (activeUsers[targetUserId]) {
+            activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
+            delete activeUsers[targetUserId];
+        }
+        
+        ctx.reply(`✅ **${name}** (ID: ${targetUserId}) ko successfully remove kar diya gaya hai.`);
+        bot.telegram.sendMessage(targetUserId, "🔒 Admin ne aapka access remove kar diya hai. Ab aap is bot ko use nahi kar sakte.");
+    } else {
+        ctx.reply("⚠️ Yeh User ID approved list mein nahi mili. Ek baar `/list_users` check karein.");
+    }
+});
+
+// --- USER COMMANDS ---
 bot.start((ctx) => ctx.reply("🤖 Welcome back! Amazon Stock Tracker Bot active hai.\n\n🔹 `/start_track <URL>`\n🔹 `/list_track`\n🔹 `/stop_all`"));
 
 bot.command('start_track', async (ctx) => {
@@ -67,6 +139,7 @@ bot.command('start_track', async (ctx) => {
     if (!amazonLink) return ctx.reply("❌ Bhai valid Amazon link toh bhejo!");
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
     if (activeUsers[chatId].some(item => item.url === amazonLink)) return ctx.reply("⚠️ Yeh link aap pehle se track kar rahe ho!");
+    
     const intervalId = setInterval(() => { checkAmazonStock(ctx, chatId, amazonLink, intervalId); }, CHECK_INTERVAL);
     activeUsers[chatId].push({ url: amazonLink, interval: intervalId });
     ctx.reply(`🚀 Link list mein add ho gaya hai! Checking chalu hai...`);
@@ -98,7 +171,6 @@ async function checkAmazonStock(ctx, chatId, targetUrl, intervalId) {
         const availabilityText = $('#availability').text().trim().toLowerCase();
         const addToCartBtn = $('#add-to-cart-button').length;
         if (!availabilityText.includes('currently unavailable') && (availabilityText.includes('in stock') || addToCartBtn > 0)) {
-            // High priority keyword for ringtone trigger
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`);
             clearInterval(intervalId);
             if (activeUsers[chatId]) {
