@@ -12,7 +12,6 @@ const CHECK_INTERVAL = 30000;
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 const approvedUsers = new Set([ADMIN_CHAT_ID.toString()]);
-// Users ke details save rakhne ke liye taaki list mein naam dikha sakein
 const userNames = { [ADMIN_CHAT_ID.toString()]: "Admin (Aap)" };
 
 const HEADERS = {
@@ -20,135 +19,112 @@ const HEADERS = {
     'Accept-Language': 'en-US,en;q=0.9'
 };
 
-// Render Timeout Prevention Server
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Bot is strictly alive and running!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
-// Middleware: Access Controller
 bot.use(async (ctx, next) => {
     if (!ctx.from) return;
     const userId = ctx.from.id.toString();
-    
-    // Agar user approved hai, toh aage badhne do
     if (approvedUsers.has(userId) || (ctx.callbackQuery && ctx.from.id.toString() === ADMIN_CHAT_ID.toString())) {
         return next();
     }
-    
     if (ctx.message && ctx.message.text === '/start') {
         const name = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 'No Name';
         const username = ctx.from.username ? `@${ctx.from.username}` : 'No Username';
-        
-        // Name ko save kar lete hain future ke liye
         userNames[userId] = name;
-        
-        ctx.reply("🔒 Access Denied! Aapka request Admin ke paas approval ke liye bhej diya gaya hai. Kripya thoda wait karein...");
+        ctx.reply("🔒 Access Denied! Request Admin ke paas bhej di gayi hai...");
         return bot.telegram.sendMessage(ADMIN_CHAT_ID, 
             `🚨 **New Access Request!**\n\n👤 Name: ${name}\n🆔 ID: ${userId}\n🌐 Username: ${username}`,
             Markup.inlineKeyboard([[Markup.button.callback('Approve ✅', `approve_${userId}`), Markup.button.callback('Decline ❌', `decline_${userId}`)]])
         );
     }
-    return ctx.reply("❌ Aap approved nahi hain. Kripya Admin se approval lein.");
+    return ctx.reply("❌ Aap approved nahi hain.");
 });
 
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("Unauthorized!");
+    const userId = ctx.from.id.toString();
     
+    // Handle inline stop tracking button (Sabhi users ke liye)
+    if (data.startsWith('stop_url_')) {
+        const index = parseInt(data.split('_')[2]);
+        const chatId = ctx.chat.id.toString();
+        
+        if (activeUsers[chatId] && activeUsers[chatId][index]) {
+            const removedItem = activeUsers[chatId][index];
+            clearInterval(removedItem.interval);
+            activeUsers[chatId].splice(index, 1);
+            await ctx.answerCbQuery("Tracking successfully band kar di gayi hai! 🛑");
+            return ctx.reply(`🛑 Is product ki tracking band kar di gayi hai:\n${removedItem.url}`, { disable_web_page_preview: true });
+        } else {
+            return ctx.answerCbQuery("⚠️ Yeh product ab tracking mein nahi hai.");
+        }
+    }
+
+    // Admin Controls
+    if (userId !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("Unauthorized!");
     const targetUserId = data.split('_')[1];
     if (data.startsWith('approve_')) {
         approvedUsers.add(targetUserId.toString());
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved!**`);
-        bot.telegram.sendMessage(targetUserId, "🥳 Mubarak ho! Admin ne aapka request approve kar diya hai.\n\nProduct track karne ke liye bhejien:\n`/start_track <Amazon_URL>`");
+        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
     } else if (data.startsWith('decline_')) {
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n❌ **Status: Declined!**`);
-        bot.telegram.sendMessage(targetUserId, "😭 Sorry! Admin ne aapka request reject kar diya hai.");
     }
     await ctx.answerCbQuery();
 });
 
-// --- ADMIN CONTROL COMMANDS ---
-
-// 1. Approved Users ki list dekhna (SIRF ADMIN KE LIYE)
 bot.command('list_users', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
-        return ctx.reply("❌ Yeh command sirf Admin use kar sakta hai!");
-    }
-    
-    if (approvedUsers.size <= 1) {
-        return ctx.reply("👥 Abhi aapke alawa koi bhi user approved nahi hai.");
-    }
-    
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Admin Only!");
+    if (approvedUsers.size <= 1) return ctx.reply("👥 Koyi approved user nahi hai.");
     let msg = "👥 **Approved Users List:**\n\n";
     let count = 1;
-    
     approvedUsers.forEach((userId) => {
         if (userId !== ADMIN_CHAT_ID.toString()) {
-            const name = userNames[userId] || "Unknown User";
-            msg += `${count}. 👤 **${name}**\n🆔 ID: \`${userId}\`\n\n`;
+            msg += `${count}. 👤 **${userNames[userId] || "User"}**\n🆔 ID: \`${userId}\`\n\n`;
             count++;
         }
     });
-    
-    msg += "ℹ️ Kisi ko nikaalne ke liye use karein:\n`/remove_user <User_ID>`";
     ctx.reply(msg, { parse_mode: 'Markdown' });
 });
 
-// 2. User ko remove karna (SIRF ADMIN KE LIYE)
 bot.command('remove_user', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) {
-        return ctx.reply("❌ Yeh command sirf Admin use kar sakta hai!");
-    }
-    
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Admin Only!");
     const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) {
-        return ctx.reply("⚠️ Sahi format use karein bhai:\n`/remove_user <User_ID>`");
-    }
-    
+    if (args.length < 2) return ctx.reply("⚠️ `/remove_user <User_ID>`");
     const targetUserId = args[1].trim();
-    
-    if (targetUserId === ADMIN_CHAT_ID.toString()) {
-        return ctx.reply("⚠️ Bhai aap khud ko block nahi kar sakte!");
-    }
-    
     if (approvedUsers.has(targetUserId)) {
-        const name = userNames[targetUserId] || "User";
         approvedUsers.delete(targetUserId);
-        
-        // Agar uski koi tracking chal rahi hai toh use bhi clear karo
         if (activeUsers[targetUserId]) {
             activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
             delete activeUsers[targetUserId];
         }
-        
-        ctx.reply(`✅ **${name}** (ID: ${targetUserId}) ko successfully remove kar diya gaya hai.`);
-        bot.telegram.sendMessage(targetUserId, "🔒 Admin ne aapka access remove kar diya hai. Ab aap is bot ko use nahi kar sakte.");
-    } else {
-        ctx.reply("⚠️ Yeh User ID approved list mein nahi mili. Ek baar `/list_users` check karein.");
-    }
+        ctx.reply(`✅ User ${targetUserId} ko remove kar diya.`);
+    } else { ctx.reply("⚠️ User nahi mila."); }
 });
 
-// --- USER COMMANDS ---
-bot.start((ctx) => ctx.reply("🤖 Welcome back! Amazon Stock Tracker Bot active hai.\n\n🔹 `/start_track <URL>`\n🔹 `/list_track`\n🔹 `/stop_all`"));
+bot.start((ctx) => ctx.reply("🤖 Amazon Tracker Bot Active!\n\n🔹 `/start_track <URL>`\n🔹 `/list_track`\n🔹 `/stop_all`"));
 
 bot.command('start_track', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
     const amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
-    if (!amazonLink) return ctx.reply("❌ Bhai valid Amazon link toh bhejo!");
+    if (!amazonLink) return ctx.reply("❌ Valid Amazon link bhejo!");
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
-    if (activeUsers[chatId].some(item => item.url === amazonLink)) return ctx.reply("⚠️ Yeh link aap pehle se track kar rahe ho!");
+    if (activeUsers[chatId].some(item => item.url === amazonLink)) return ctx.reply("⚠️ Yeh pehle se track ho raha hai!");
     
-    const intervalId = setInterval(() => { checkAmazonStock(ctx, chatId, amazonLink, intervalId); }, CHECK_INTERVAL);
+    // Naye function call mein index pass karenge tracking arrays ko properly handle karne ke liye
+    const intervalId = setInterval(() => { checkAmazonStock(ctx, chatId, amazonLink); }, CHECK_INTERVAL);
     activeUsers[chatId].push({ url: amazonLink, interval: intervalId });
-    ctx.reply(`🚀 Link list mein add ho gaya hai! Checking chalu hai...`);
-    checkAmazonStock(ctx, chatId, amazonLink, intervalId);
+    ctx.reply(`🚀 Tracking chalu ho gayi hai...`);
+    checkAmazonStock(ctx, chatId, amazonLink);
 });
 
 bot.command('list_track', (ctx) => {
     const chatId = ctx.chat.id.toString();
-    if (!activeUsers[chatId] || activeUsers[chatId].length === 0) return ctx.reply("😴 Abhi koi product track nahi ho raha hai.");
+    if (!activeUsers[chatId] || activeUsers[chatId].length === 0) return ctx.reply("😴 Koyi active tracking nahi hai.");
     let msg = "📋 **Active Tracking Links:**\n\n";
     activeUsers[chatId].forEach((item, i) => { msg += `${i + 1}. ${item.url}\n\n`; });
     ctx.reply(msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
@@ -159,25 +135,28 @@ bot.command('stop_all', (ctx) => {
     if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
         activeUsers[chatId].forEach(item => clearInterval(item.interval));
         delete activeUsers[chatId];
-        ctx.reply("🛑 Saari tracking band kar di gayi hai.");
+        ctx.reply("🛑 Saari tracking band kar di gayi.");
     } else { ctx.reply("⚠️ Koyi active tracking nahi mili."); }
 });
 
-async function checkAmazonStock(ctx, chatId, targetUrl, intervalId) {
+async function checkAmazonStock(ctx, chatId, targetUrl) {
     if (!activeUsers[chatId]) return;
+    const itemIndex = activeUsers[chatId].findIndex(item => item.url === targetUrl);
+    if (itemIndex === -1) return; // Agar track list se hat chuka hai toh checking rok do
+
     try {
         const response = await axios.get(targetUrl, { headers: HEADERS });
         const $ = cheerio.load(response.data);
         const availabilityText = $('#availability').text().trim().toLowerCase();
         const addToCartBtn = $('#add-to-cart-button').length;
+        
         if (!availabilityText.includes('currently unavailable') && (availabilityText.includes('in stock') || addToCartBtn > 0)) {
-            await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`);
-            clearInterval(intervalId);
-            if (activeUsers[chatId]) {
-                activeUsers[chatId] = activeUsers[chatId].filter(item => item.url !== targetUrl);
-            }
+            // Har 30 second par notification aayega jab tak STOP button na dabaya jaye
+            await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
+                Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
+            );
         }
     } catch (e) { console.error(`Scraping error:`, e.message); }
 }
 
-bot.launch().then(() => console.log("Bot running successfully..."));
+bot.launch().then(() => console.log("Amazon Bot updated successfully..."));
