@@ -7,7 +7,7 @@ const express = require('express');
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
 const ADMIN_CHAT_ID = '7485181331'; 
 const CHECK_INTERVAL = 15000; // 15 Seconds Stock Check
-const RENDER_URL = 'https://amazon-stock-bot-final.onrender.com/'; // 🔥 Aapka Render URL locked!
+const RENDER_URL = 'https://amazon-stock-bot-final.onrender.com/'; // Locked!
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -15,10 +15,11 @@ const activeUsers = {};
 
 global.amazonApprovedList = global.amazonApprovedList || [ADMIN_CHAT_ID.toString()];
 
+// Heavy Real-Device Mobile Users Agents to Bypass IP Blocks
 const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/605.1.15',
+    'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 ];
 
 const app = express();
@@ -26,12 +27,12 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Amazon Secure Bot is Live!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
-// 🔥 WATERPROOF SELF-PING (HAR 30 SECOND MEIN SERVER KO JHATKA DEGA)
+// 🔥 WATERPROOF SELF-PING
 setInterval(() => {
     axios.get(RENDER_URL)
         .then(() => console.log('⚡ Self-Awake: Server ko sone nahi diya!'))
         .catch((err) => console.log('Ping skip, agle 30s loop me check hoga.'));
-}, 30000); // Strict 30 Seconds!
+}, 30000);
 
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
@@ -136,7 +137,7 @@ bot.command('start_track', async (ctx) => {
     
     const chatId = ctx.chat.id.toString();
     const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
-    const amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
+    const amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in') || arg.includes('amzn.to'));
     if (!amazonLink) return ctx.reply("❌ Valid Amazon link bhejo!");
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
     if (activeUsers[chatId].some(item => item.url === amazonLink)) return ctx.reply("⚠️ Yeh pehle se track ho raha hai!");
@@ -178,17 +179,34 @@ async function checkAmazonStock(ctx, chatId, targetUrl) {
     const randomAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
     try {
-        const response = await axios.get(targetUrl, { headers: { 'User-Agent': randomAgent, 'Accept-Language': 'en-US,en;q=0.9' }, timeout: 8000 });
+        const response = await axios.get(targetUrl, { 
+            headers: { 
+                'User-Agent': randomAgent, 
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }, 
+            timeout: 15000 // 🔥 Timeout ko 8s se badhakar 15s kiya taaki delay me error na aaye
+        });
+        
         const $ = cheerio.load(response.data);
+        
+        // 🔥 UNIVERSAL TEXT CHECKING (Agar selectors block ho toh page text se pakdega)
+        const pageText = $('body').text().toLowerCase();
         const availabilityText = $('#availability').text().trim().toLowerCase();
         const addToCartBtn = $('#add-to-cart-button').length;
         
-        if (!availabilityText.includes('currently unavailable') && (availabilityText.includes('in stock') || addToCartBtn > 0)) {
+        const isUnavailable = availabilityText.includes('currently unavailable') || pageText.includes('currently unavailable') || pageText.includes('out of stock');
+        const isAvailable = availabilityText.includes('in stock') || pageText.includes('in stock') || addToCartBtn > 0 || pageText.includes('add to cart');
+        
+        if (!isUnavailable && isAvailable) {
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai Amazon pr stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
-            ).catch(e => console.log("Notification speed buffer handled."));
+            ).catch(e => console.log("Speed limit bypass."));
         }
-    } catch (e) { console.log(`[Amazon Bypass] Error or timeout, retrying...`); }
+    } catch (e) { 
+        console.log(`[Amazon Bypass] Connection timeout, auto-retrying next loop...`); 
+    }
 }
 
 bot.launch().then(() => console.log("Amazon 24/7 Self-Awake Bot Online..."));
