@@ -2,11 +2,22 @@ const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const express = require('express');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 15000; // 15 Seconds
+const CHECK_INTERVAL = 15000; // Strict 15 Seconds
+
+// 🌐 WEBSHARE PROXY INTEGRATION (Screenshot se locked)
+const PROXY_HOST = '38.154.203.95'; 
+const PROXY_PORT = '5863';
+const PROXY_USER = 'kboilrra';
+const PROXY_PASS = 'd15npnesdzya';
+
+// Secure Proxy Proxy Connection Build
+const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
+const proxyAgent = new HttpsProxyAgent(proxyUrl);
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -14,16 +25,15 @@ const activeUsers = {};
 
 global.amazonApprovedList = global.amazonApprovedList || [ADMIN_CHAT_ID.toString()];
 
-// Amazon strict bypass user agents (Pure Mobile Fingerprints)
 const USER_AGENTS = [
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/605.1.15',
     'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36',
-    'Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Mobile Safari/537.36'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 ];
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Amazon Anti-Captcha Server is Online!'));
+app.get('/', (req, res) => res.send('Amazon Proxy-Engine is safely running!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
 function checkAmazonAccess(ctx) {
@@ -91,14 +101,14 @@ bot.command('remove_user', (ctx) => {
 // --- USER COMMANDS ---
 bot.start((ctx) => {
     if (!checkAmazonAccess(ctx)) return;
-    ctx.reply("🤖 Amazon Ultimate Tracker Bot Active!\n\n🔹 `/start_track <URL>` - Track product\n🔹 `/list` - View active links\n🔹 `/stop_track <URL>` - Stop specific link\n🔹 `/remove_all` - Stop everything");
+    ctx.reply("🤖 Amazon Proxy-Secured Bot Active!\n\n🔹 `/start_track <URL>` - Track product\n🔹 `/list` - View active links\n🔹 `/stop_track <URL>` - Stop specific link\n🔹 `/remove_all` - Stop everything");
 });
 
 bot.command('start_track', async (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     const chatId = ctx.chat.id.toString();
     const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
-    let amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
+    const amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
     
     if (!amazonLink) return ctx.reply("❌ Valid Amazon link bhejo!");
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
@@ -108,7 +118,7 @@ bot.command('start_track', async (ctx) => {
     itemConfig.interval = setInterval(() => { checkAmazonStock(ctx, chatId, amazonLink, itemConfig); }, CHECK_INTERVAL);
     activeUsers[chatId].push(itemConfig);
     
-    ctx.reply("🚀 Amazon tracking chalu ho gayi hai (Har 15 seconds)...");
+    ctx.reply("🚀 Amazon tracking chalu ho gayi hai...");
     checkAmazonStock(ctx, chatId, amazonLink, itemConfig);
 });
 
@@ -134,8 +144,8 @@ bot.command('stop_track', (ctx) => {
     if (index > -1) {
         clearInterval(activeUsers[chatId][index].interval);
         activeUsers[chatId].splice(index, 1);
-        ctx.reply("🛑 Is product ki tracking safely band kar di gayi hai.");
-    } else { ctx.reply("⚠️ Yeh URL aapki active list mein nahi mila."); }
+        ctx.reply("🛑 Is product ki tracking band kar di gayi hai.");
+    } else { ctx.reply("⚠️ Yeh URL active list mein nahi mila."); }
 });
 
 bot.command('remove_all', (ctx) => {
@@ -148,7 +158,7 @@ bot.command('remove_all', (ctx) => {
     } else { ctx.reply("⚠️ Koyi active tracking nahi mili."); }
 });
 
-// --- ULTRA HARDCORE BYPASS ENGINE ---
+// --- CORE PROXY BYPASS ENGINE ---
 async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.url === targetUrl);
@@ -158,22 +168,13 @@ async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
 
     try {
         const response = await axios.get(targetUrl, { 
+            httpsAgent: proxyAgent, // Ab request proxy ke raaste jaegi
             headers: { 
                 'User-Agent': randomAgent, 
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Device-Memory': '8',
-                'Downlink': '10',
-                'ECT': '4g',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Upgrade-Insecure-Requests': '1',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            },
+                'Connection': 'keep-alive'
+            }, 
             timeout: 9000 
         });
         
@@ -181,59 +182,31 @@ async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
         const htmlContent = $('body').html() || '';
         const pageText = $('body').text().toLowerCase();
         
-        // Amazon Mobile + App layouts ka complete scanning framework
-        const outOfStockKeywords = [
-            'currently unavailable',
-            'out of stock',
-            'not available',
-            'available from these sellers',
-            'currentlyunavailab'
-        ];
-        
-        const inStockKeywords = [
-            'add to cart',
-            'buy now',
-            'pre-order now',
-            'in stock',
-            'select assembly option'
-        ];
-
-        // 1. Pehle check karo page par block ya captcha to nahi aa gaya
         if (pageText.includes('enter the characters you see below') || htmlContent.includes('captcha')) {
-            console.log(`[Amazon Engine] Captcha Wall hit! Retrying on next loop...`);
-            return; 
+            console.log(`[Amazon Proxy] Captcha wall detected, waiting for next rotation...`);
+            return;
         }
 
-        // 2. Strict check: Kya page par "Unavailable" ka koi saboot hai?
-        let isUnavailable = outOfStockKeywords.some(keyword => pageText.includes(keyword)) || 
-                             $('#availability').text().toLowerCase().includes('currently unavailable');
+        const isUnavailable = pageText.includes('currently unavailable') || 
+                             pageText.includes('out of stock') || 
+                             pageText.includes('available from these sellers');
                              
-        // 3. Kya page par "Buy" ya "Cart" buttons ka koi wajood hai?
-        let hasStockButtons = inStockKeywords.some(keyword => pageText.includes(keyword)) || 
-                                $('#add-to-cart-button').length > 0 || 
-                                htmlContent.includes('submit.add-to-cart');
-
-        // FORCE BUY BACKUP: Agar page text mein directly 'add to cart' ya 'buy now' hai, toh system block filter ko check karke trigger marega
-        if (htmlContent.includes('add-to-cart') && !pageText.includes('currently unavailable')) {
-            isUnavailable = false;
-            hasStockButtons = true;
-        }
-
-        // 4. Final Verification
+        const hasStockButtons = pageText.includes('add to cart') || 
+                                pageText.includes('buy now') || 
+                                $('#add-to-cart-button').length > 0;
+        
         if (!isUnavailable && hasStockButtons) {
             itemConfig.lastStatus = 'in_stock';
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai Amazon pr stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
-            ).catch(e => console.log("Telegram Limit Safeguard."));
+            ).catch(e => {});
         } else {
             if (itemConfig.lastStatus === 'in_stock') {
                 itemConfig.lastStatus = 'out_of_stock';
                 await bot.telegram.sendMessage(chatId, `⚠️ **ALERT: Amazon Stock Over!**\n\nAmazon product ab wapas Out of Stock ho chuka hai.\nLink: ${targetUrl}`, { disable_web_page_preview: true });
             }
         }
-    } catch (e) { 
-        console.log(`[Amazon Engine] Connection reset by peer or server timeout. Retrying next cycle...`); 
-    }
+    } catch (e) { console.log(`[Amazon Proxy] Network timeout or connection refresh.`); }
 }
 
-bot.launch().then(() => console.log("Amazon Ultimate Anti-Block Engine Activated..."));
+bot.launch().then(() => console.log("Amazon Bot running securely via Webshare Proxy..."));
