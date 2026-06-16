@@ -5,14 +5,17 @@ const express = require('express');
 
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
-const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 15000; // 15 Seconds Done!
+const ADMIN_CHAT_ID = '7485181331'; // Aapki locked Admin ID
+const CHECK_INTERVAL = 15000; // 15 Seconds
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 
-global.amazonApprovedList = global.amazonApprovedList || [ADMIN_CHAT_ID.toString()];
+// PERMANENT LIST: Paid customer ki ID yahan comma (,) laga kar add kar dena bhai
+const PERMANENT_APPROVED_USERS = [
+    '7485181331', // Aapki Admin ID (Hamesha active)
+];
 
 const USER_AGENTS = [
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/605.1.15',
@@ -22,18 +25,18 @@ const USER_AGENTS = [
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Amazon 15s Loop Server is Running!'));
+app.get('/', (req, res) => res.send('Amazon Fixed Server Running!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
 function checkAmazonAccess(ctx) {
     const userId = ctx.from.id.toString();
-    if (global.amazonApprovedList.includes(userId)) return true;
+    if (PERMANENT_APPROVED_USERS.includes(userId)) return true;
 
     const name = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim() || 'No Name';
-    ctx.reply(`🔒 **Access Denied!**\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin ko apni ID send karein approval ke liye.`);
+    ctx.reply(`🔒 **Access Denied!**\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin se approval lein.`);
     
     bot.telegram.sendMessage(ADMIN_CHAT_ID, 
-        `🚨 **New Amazon Bot Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Approve manually:\n\`/approve ${userId}\``
+        `🚨 **New Amazon Bot Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Is user ko permanent approve karne ke liye code mein \`PERMANENT_APPROVED_USERS\` list mein iski ID add karein.`
     );
     return false;
 }
@@ -57,20 +60,7 @@ bot.on('callback_query', async (ctx) => {
 
 bot.start((ctx) => {
     if (!checkAmazonAccess(ctx)) return;
-    ctx.reply("🤖 Amazon 15s Tracker Bot Active!\n\n🔹 `/start_track <URL>`\n🔹 `/list_track`\n🔹 `/stop_all`");
-});
-
-bot.command('approve', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Admin Only!");
-    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <User_ID>`");
-    
-    const targetUserId = args[1].trim();
-    if (!global.amazonApprovedList.includes(targetUserId)) {
-        global.amazonApprovedList.push(targetUserId);
-        ctx.reply(`✅ User ID \`${targetUserId}\` ko successfully approve kar diya gaya hai.`);
-        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
-    }
+    ctx.reply("🤖 Amazon Fixed 15s Tracker Bot Active!\n\n🔹 `/start_track <URL>`\n🔹 `/list_track`\n🔹 `/stop_all`");
 });
 
 bot.command('start_track', async (ctx) => {
@@ -91,7 +81,7 @@ bot.command('start_track', async (ctx) => {
     itemConfig.interval = setInterval(() => { checkAmazonStock(ctx, chatId, amazonLink, itemConfig); }, CHECK_INTERVAL);
     activeUsers[chatId].push(itemConfig);
     
-    ctx.reply("🚀 Amazon tracking chalu ho gayi hai (Har 15 seconds)...");
+    ctx.reply("🚀 Amazon tracking chalu ho gayi hai...");
     checkAmazonStock(ctx, chatId, amazonLink, itemConfig);
 });
 
@@ -148,14 +138,14 @@ async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
             itemConfig.lastStatus = 'in_stock';
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai Amazon pr stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
-            ).catch(e => console.log("Telegram Rate limit bypassed."));
+            ).catch(e => console.log("Telegram Rate limit handle."));
         } else {
             if (itemConfig.lastStatus === 'in_stock') {
                 itemConfig.lastStatus = 'out_of_stock';
                 await bot.telegram.sendMessage(chatId, `⚠️ **ALERT: Amazon Stock Over!**\n\nAmazon product ab wapas Out of Stock ho chuka hai.\nLink: ${targetUrl}`, { disable_web_page_preview: true });
             }
         }
-    } catch (e) { console.log(`[Amazon 15s] Blocked or Timeout, retrying...`); }
+    } catch (e) { console.log(`[Amazon 15s] Error, retrying...`); }
 }
 
-bot.launch().then(() => console.log("Amazon 15s Engine Online..."));
+bot.launch().then(() => console.log("Amazon Hardlocked Engine Live..."));
