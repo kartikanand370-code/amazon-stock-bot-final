@@ -6,12 +6,13 @@ const express = require('express');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 15000; // Strict 15 Seconds Set!
+const CHECK_INTERVAL = 15000; // Strict 15 Seconds Done!
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 
+// Hardlocked Memory List (Aapki ID hamesha approved rahegi)
 global.amazonApprovedList = global.amazonApprovedList || [ADMIN_CHAT_ID.toString()];
 
 const USER_AGENTS = [
@@ -22,9 +23,10 @@ const USER_AGENTS = [
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Amazon 15s Server Connected!'));
+app.get('/', (req, res) => res.send('Amazon System Fully Functional!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
+// Strict Security Check Function
 function checkAmazonAccess(ctx) {
     const userId = ctx.from.id.toString();
     if (global.amazonApprovedList.includes(userId)) return true;
@@ -33,11 +35,12 @@ function checkAmazonAccess(ctx) {
     ctx.reply(`🔒 **Access Denied!**\nAap abhi approved nahi hain.\nAapki Telegram ID: \`${userId}\`\n\nAdmin se approval lein.`);
     
     bot.telegram.sendMessage(ADMIN_CHAT_ID, 
-        `🚨 **New Amazon Bot Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye is command ko copy karke send karein:\n\`/approve ${userId}\``
+        `🚨 **New Amazon Bot Request!**\n\n👤 Name: ${name}\n🆔 ID: \`${userId}\`\n\n👉 Approve karne ke liye send karein:\n\`/approve ${userId}\``
     );
     return false;
 }
 
+// Inline buttons dashboard handle karne ke liye (Stop Tracking Button)
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     if (data.startsWith('stop_url_')) {
@@ -55,31 +58,20 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery();
 });
 
-bot.command('approve', (ctx) => {
-    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Strict Admin Only!");
-    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <User_ID>`");
-    
-    const targetUserId = args[1].trim();
-    if (!global.amazonApprovedList.includes(targetUserId)) {
-        global.amazonApprovedList.push(targetUserId);
-        ctx.reply(`✅ Success! User ID \`${targetUserId}\` ko successfully approve kar diya gaya hai.`);
-        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
-    } else {
-        ctx.reply("⚠️ Yeh user pehle se approved hai.");
-    }
-});
+// --- PUBLIC/USER COMMANDS (ALL FIXED) ---
 
 bot.start((ctx) => {
     if (!checkAmazonAccess(ctx)) return;
-    ctx.reply("🤖 Amazon 15s Tracker Bot Active!\n\n🔹 `/start_track <URL>`\n🔹 `/list_track`\n🔹 `/stop_all`");
+    ctx.reply("🤖 Amazon 15s System Tracker Bot Active!\n\n🔹 `/start_track <URL>` - Track product\n🔹 `/list_track` - Active tracking list\n🔹 `/stop_all` - Stop all trackings");
 });
 
 bot.command('start_track', async (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
+    
     const chatId = ctx.chat.id.toString();
     const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
     const amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
+    
     if (!amazonLink) return ctx.reply("❌ Valid Amazon link bhejo!");
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
     if (activeUsers[chatId].some(item => item.url === amazonLink)) return ctx.reply("⚠️ Pehle se track ho raha hai!");
@@ -99,23 +91,71 @@ bot.command('start_track', async (ctx) => {
 
 bot.command('list_track', (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
+    
     const chatId = ctx.chat.id.toString();
     if (!activeUsers[chatId] || activeUsers[chatId].length === 0) return ctx.reply("😴 Koyi active tracking nahi hai.");
-    let msg = "📋 **Active Tracking Links:**\n\n";
-    activeUsers[chatId].forEach((item, i) => { msg += `${i + 1}. ${item.url}\n\n`; });
+    
+    let msg = "📋 **Active Amazon Tracking Links:**\n\n";
+    activeUsers[chatId].forEach((item, i) => { 
+        msg += `${i + 1}. ${item.url}\n\n`; 
+    });
     ctx.reply(msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
 });
 
 bot.command('stop_all', (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
+    
     const chatId = ctx.chat.id.toString();
     if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
         activeUsers[chatId].forEach(item => clearInterval(item.interval));
         delete activeUsers[chatId];
-        ctx.reply("🛑 Saari tracking band kar di gayi.");
-    } else { ctx.reply("⚠️ Koyi active tracking nahi mili."); }
+        ctx.reply("🛑 Saari active trackings band kar di gayi hain.");
+    } else { 
+        ctx.reply("⚠️ Koyi active tracking nahi mili."); 
+    }
 });
 
+// --- STRICT OWNER/ADMIN CONTROL COMMANDS ---
+
+bot.command('approve', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Strict Admin Only!");
+    
+    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
+    if (args.length < 2) return ctx.reply("⚠️ Format: `/approve <User_ID>`");
+    
+    const targetUserId = args[1].trim();
+    if (!global.amazonApprovedList.includes(targetUserId)) {
+        global.amazonApprovedList.push(targetUserId);
+        ctx.reply(`✅ Success! User ID \`${targetUserId}\` ko approve kar diya gaya hai.`);
+        bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
+    } else {
+        ctx.reply("⚠️ Yeh user pehle se approved hai.");
+    }
+});
+
+bot.command('remove_user', (ctx) => {
+    if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Strict Admin Only!");
+    
+    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
+    if (args.length < 2) return ctx.reply("⚠️ Format: `/remove_user <User_ID>`");
+    
+    const targetUserId = args[1].trim();
+    const index = global.amazonApprovedList.indexOf(targetUserId);
+    
+    if (index > -1) {
+        global.amazonApprovedList.splice(index, 1);
+        if (activeUsers[targetUserId]) {
+            activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
+            delete activeUsers[targetUserId];
+        }
+        ctx.reply(`✅ User ID \`${targetUserId}\` ko remove kar diya gaya hai.`);
+        bot.telegram.sendMessage(targetUserId, "🔒 Admin ne aapka access remove kar diya hai.");
+    } else { 
+        ctx.reply("⚠️ ID approved list mein nahi mili."); 
+    }
+});
+
+// --- CORE AMAZON STOCK ENGINE ---
 async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.url === targetUrl);
@@ -157,7 +197,7 @@ async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
                 await bot.telegram.sendMessage(chatId, `⚠️ **ALERT: Amazon Stock Over!**\n\nAmazon product ab wapas Out of Stock ho chuka hai.\nLink: ${targetUrl}`, { disable_web_page_preview: true });
             }
         }
-    } catch (e) { console.log(`[Amazon Loop] Error, retrying...`); }
+    } catch (e) { console.log(`[Amazon Engine] Loop error or captcha, retrying...`); }
 }
 
-bot.launch().then(() => console.log("Amazon 15s Command Engine Deployed..."));
+bot.launch().then(() => console.log("Amazon Full System Deployed..."));
