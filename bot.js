@@ -6,7 +6,7 @@ const express = require('express');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 15000; // 15 Seconds pr set kar diya hai
+const CHECK_INTERVAL = 10000; // 10 Seconds
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -115,7 +115,7 @@ bot.command('start_track', async (ctx) => {
     
     const intervalId = setInterval(() => { checkAmazonStock(ctx, chatId, amazonLink); }, CHECK_INTERVAL);
     activeUsers[chatId].push({ url: amazonLink, interval: intervalId });
-    ctx.reply(`🚀 Tracking chalu ho gayi hai (Har 15 seconds mein check hoga)...`);
+    ctx.reply(`🚀 Tracking chalu ho gayi hai...`);
     checkAmazonStock(ctx, chatId, amazonLink);
 });
 
