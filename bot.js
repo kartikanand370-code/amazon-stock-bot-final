@@ -2,6 +2,8 @@ const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
@@ -11,15 +13,32 @@ const CHECK_INTERVAL = 10000; // 10 Seconds
 
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
-const approvedUsers = new Set([ADMIN_CHAT_ID.toString()]);
+const FILE_PATH = path.join(__dirname, 'amazon_users.json');
+
+// Memory persist karne ke liye file function
+function loadApprovedUsers() {
+    try {
+        if (fs.existsSync(FILE_PATH)) {
+            const data = fs.readFileSync(FILE_PATH, 'utf8');
+            return new Set(JSON.parse(data));
+        }
+    } catch (e) { console.error("Error loading users:", e); }
+    return new Set([ADMIN_CHAT_ID.toString()]);
+}
+
+function saveApprovedUsers() {
+    try {
+        fs.writeFileSync(FILE_PATH, JSON.stringify(Array.from(approvedUsers)), 'utf8');
+    } catch (e) { console.error("Error saving users:", e); }
+}
+
+const approvedUsers = loadApprovedUsers();
 const userNames = { [ADMIN_CHAT_ID.toString()]: "Admin (Aap)" };
 
-// Rotation ke liye multiple browser agents taaki Amazon pakad na sake
 const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
 ];
 
 const app = express();
@@ -27,7 +46,6 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Amazon Bot is strictly alive and running!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
-// Middleware: Access Controller
 bot.use(async (ctx, next) => {
     if (!ctx.from) return;
     const userId = ctx.from.id.toString();
@@ -70,6 +88,7 @@ bot.on('callback_query', async (ctx) => {
     const targetUserId = data.split('_')[1];
     if (data.startsWith('approve_')) {
         approvedUsers.add(targetUserId.toString());
+        saveApprovedUsers(); // File me save ho gaya
         await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n✅ **Status: Approved!**`);
         bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
     } else if (data.startsWith('decline_')) {
@@ -99,6 +118,7 @@ bot.command('remove_user', (ctx) => {
     const targetUserId = args[1].trim();
     if (approvedUsers.has(targetUserId)) {
         approvedUsers.delete(targetUserId);
+        saveApprovedUsers(); // File se ud gaya
         if (activeUsers[targetUserId]) {
             activeUsers[targetUserId].forEach(item => clearInterval(item.interval));
             delete activeUsers[targetUserId];
@@ -148,30 +168,17 @@ async function checkAmazonStock(ctx, chatId, targetUrl) {
     const randomAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
     try {
-        const response = await axios.get(targetUrl, { 
-            headers: {
-                'User-Agent': randomAgent,
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Device-Memory': '8',
-                'Downlink': '10'
-            },
-            timeout: 8000 // 8 second timeout to prevent hanging requests
-        });
-        
+        const response = await axios.get(targetUrl, { headers: { 'User-Agent': randomAgent, 'Accept-Language': 'en-US,en;q=0.9' }, timeout: 8000 });
         const $ = cheerio.load(response.data);
         const availabilityText = $('#availability').text().trim().toLowerCase();
         const addToCartBtn = $('#add-to-cart-button').length;
         
         if (!availabilityText.includes('currently unavailable') && (availabilityText.includes('in stock') || addToCartBtn > 0)) {
-            await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
+            await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai Amazon pr stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
             );
         }
-    } catch (e) { 
-        // Anti-crash: network drop ya proxy block hone par silent error handling
-        console.log(`[Amazon Bypass] Request blocked or timed out, retrying in next 10s...`); 
-    }
+    } catch (e) { console.log(`[Amazon Bypass] Error or timeout, retrying...`); }
 }
 
-bot.launch().then(() => console.log("Amazon Bot anti-crash system deployed..."));
+bot.launch().then(() => console.log("Amazon Ultimate Bot Live..."));
