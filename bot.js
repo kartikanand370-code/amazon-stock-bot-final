@@ -6,7 +6,7 @@ const express = require('express');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
 const ADMIN_CHAT_ID = '7485181331'; 
-const CHECK_INTERVAL = 30000; 
+const CHECK_INTERVAL = 15000; // 15 Seconds pr set kar diya hai
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -47,7 +47,6 @@ bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     const userId = ctx.from.id.toString();
     
-    // Handle inline stop tracking button (Sabhi users ke liye)
     if (data.startsWith('stop_url_')) {
         const index = parseInt(data.split('_')[2]);
         const chatId = ctx.chat.id.toString();
@@ -63,7 +62,6 @@ bot.on('callback_query', async (ctx) => {
         }
     }
 
-    // Admin Controls
     if (userId !== ADMIN_CHAT_ID.toString()) return ctx.answerCbQuery("Unauthorized!");
     const targetUserId = data.split('_')[1];
     if (data.startsWith('approve_')) {
@@ -115,10 +113,9 @@ bot.command('start_track', async (ctx) => {
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
     if (activeUsers[chatId].some(item => item.url === amazonLink)) return ctx.reply("⚠️ Yeh pehle se track ho raha hai!");
     
-    // Naye function call mein index pass karenge tracking arrays ko properly handle karne ke liye
     const intervalId = setInterval(() => { checkAmazonStock(ctx, chatId, amazonLink); }, CHECK_INTERVAL);
     activeUsers[chatId].push({ url: amazonLink, interval: intervalId });
-    ctx.reply(`🚀 Tracking chalu ho gayi hai...`);
+    ctx.reply(`🚀 Tracking chalu ho gayi hai (Har 15 seconds mein check hoga)...`);
     checkAmazonStock(ctx, chatId, amazonLink);
 });
 
@@ -142,7 +139,7 @@ bot.command('stop_all', (ctx) => {
 async function checkAmazonStock(ctx, chatId, targetUrl) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.url === targetUrl);
-    if (itemIndex === -1) return; // Agar track list se hat chuka hai toh checking rok do
+    if (itemIndex === -1) return;
 
     try {
         const response = await axios.get(targetUrl, { headers: HEADERS });
@@ -151,7 +148,6 @@ async function checkAmazonStock(ctx, chatId, targetUrl) {
         const addToCartBtn = $('#add-to-cart-button').length;
         
         if (!availabilityText.includes('currently unavailable') && (availabilityText.includes('in stock') || addToCartBtn > 0)) {
-            // Har 30 second par notification aayega jab tak STOP button na dabaya jaye
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
             );
