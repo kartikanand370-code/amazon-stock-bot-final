@@ -12,21 +12,20 @@ const CHECK_INTERVAL = 15000; // 15 Seconds
 const bot = new Telegraf(BOT_TOKEN);
 const activeUsers = {};
 
-// Hardlocked Approved List
 global.amazonApprovedList = global.amazonApprovedList || [ADMIN_CHAT_ID.toString()];
 
+// Amazon strict bypass user agents (Pure Mobile Fingerprints)
 const USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36'
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/605.1.15',
+    'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36',
+    'Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Mobile Safari/537.36'
 ];
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Amazon Ultimate Tracking Server is Live!'));
+app.get('/', (req, res) => res.send('Amazon Anti-Captcha Server is Online!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
-// Security Access Checker
 function checkAmazonAccess(ctx) {
     const userId = ctx.from.id.toString();
     if (global.amazonApprovedList.includes(userId)) return true;
@@ -40,7 +39,6 @@ function checkAmazonAccess(ctx) {
     return false;
 }
 
-// Inline button callback query handler
 bot.on('callback_query', async (ctx) => {
     const data = ctx.callbackQuery.data;
     if (data.startsWith('stop_url_')) {
@@ -58,7 +56,7 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery();
 });
 
-// --- OWNER ADMIN COMMANDS ---
+// --- ADMIN COMMANDS ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Strict Admin Only!");
     const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
@@ -69,9 +67,7 @@ bot.command('approve', (ctx) => {
         global.amazonApprovedList.push(targetUserId);
         ctx.reply(`✅ Success! User ID \`${targetUserId}\` approved.`);
         bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
-    } else {
-        ctx.reply("⚠️ Yeh user pehle se approved hai.");
-    }
+    } else { ctx.reply("⚠️ Yeh user pehle se approved hai."); }
 });
 
 bot.command('remove_user', (ctx) => {
@@ -92,8 +88,7 @@ bot.command('remove_user', (ctx) => {
     }
 });
 
-// --- USER COMMANDS (AAPKE PATTERN KE MUTABIK RE-MAPPED) ---
-
+// --- USER COMMANDS ---
 bot.start((ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     ctx.reply("🤖 Amazon Ultimate Tracker Bot Active!\n\n🔹 `/start_track <URL>` - Track product\n🔹 `/list` - View active links\n🔹 `/stop_track <URL>` - Stop specific link\n🔹 `/remove_all` - Stop everything");
@@ -103,7 +98,7 @@ bot.command('start_track', async (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     const chatId = ctx.chat.id.toString();
     const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
-    const amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
+    let amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
     
     if (!amazonLink) return ctx.reply("❌ Valid Amazon link bhejo!");
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
@@ -117,18 +112,15 @@ bot.command('start_track', async (ctx) => {
     checkAmazonStock(ctx, chatId, amazonLink, itemConfig);
 });
 
-// AAPKE MUTABIK FIXED: /list command mapping
 bot.command('list', (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     const chatId = ctx.chat.id.toString();
     if (!activeUsers[chatId] || activeUsers[chatId].length === 0) return ctx.reply("😴 Koyi active tracking nahi hai.");
-    
     let msg = "📋 **Active Tracking Links:**\n\n";
     activeUsers[chatId].forEach((item, i) => { msg += `${i + 1}. ${item.url}\n\n`; });
     ctx.reply(msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
 });
 
-// AAPKE MUTABIK FIXED: /stop_track command mapping
 bot.command('stop_track', (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     const chatId = ctx.chat.id.toString();
@@ -143,12 +135,9 @@ bot.command('stop_track', (ctx) => {
         clearInterval(activeUsers[chatId][index].interval);
         activeUsers[chatId].splice(index, 1);
         ctx.reply("🛑 Is product ki tracking safely band kar di gayi hai.");
-    } else {
-        ctx.reply("⚠️ Yeh URL aapki active list mein nahi mila.");
-    }
+    } else { ctx.reply("⚠️ Yeh URL aapki active list mein nahi mila."); }
 });
 
-// AAPKE MUTABIK FIXED: /remove_all command mapping
 bot.command('remove_all', (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     const chatId = ctx.chat.id.toString();
@@ -156,12 +145,10 @@ bot.command('remove_all', (ctx) => {
         activeUsers[chatId].forEach(item => clearInterval(item.interval));
         delete activeUsers[chatId];
         ctx.reply("🛑 Saari active tracking links mita di gayi hain.");
-    } else { 
-        ctx.reply("⚠️ Koyi active tracking nahi mili."); 
-    }
+    } else { ctx.reply("⚠️ Koyi active tracking nahi mili."); }
 });
 
-// --- CORE BLOCK-PROOF SCRAPING ENGINE ---
+// --- ULTRA HARDCORE BYPASS ENGINE ---
 async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.url === targetUrl);
@@ -173,38 +160,80 @@ async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
         const response = await axios.get(targetUrl, { 
             headers: { 
                 'User-Agent': randomAgent, 
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive'
-            }, 
-            timeout: 8000 
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Device-Memory': '8',
+                'Downlink': '10',
+                'ECT': '4g',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            timeout: 9000 
         });
         
         const $ = cheerio.load(response.data);
+        const htmlContent = $('body').html() || '';
         const pageText = $('body').text().toLowerCase();
         
-        // UNIVERSAL TEXT SCRAPING (Selectors par dependency khatam)
-        const isUnavailable = pageText.includes('currently unavailable') || 
-                             pageText.includes('out of stock') || 
-                             pageText.includes('available from these sellers');
-                             
-        const hasStockButtons = pageText.includes('add to cart') || 
-                                pageText.includes('buy now') || 
-                                pageText.includes('pre-order now');
+        // Amazon Mobile + App layouts ka complete scanning framework
+        const outOfStockKeywords = [
+            'currently unavailable',
+            'out of stock',
+            'not available',
+            'available from these sellers',
+            'currentlyunavailab'
+        ];
         
-        // Agar unavailable shabd nahi hai, aur inme se koi khareedne wala shabd moujood hai
+        const inStockKeywords = [
+            'add to cart',
+            'buy now',
+            'pre-order now',
+            'in stock',
+            'select assembly option'
+        ];
+
+        // 1. Pehle check karo page par block ya captcha to nahi aa gaya
+        if (pageText.includes('enter the characters you see below') || htmlContent.includes('captcha')) {
+            console.log(`[Amazon Engine] Captcha Wall hit! Retrying on next loop...`);
+            return; 
+        }
+
+        // 2. Strict check: Kya page par "Unavailable" ka koi saboot hai?
+        let isUnavailable = outOfStockKeywords.some(keyword => pageText.includes(keyword)) || 
+                             $('#availability').text().toLowerCase().includes('currently unavailable');
+                             
+        // 3. Kya page par "Buy" ya "Cart" buttons ka koi wajood hai?
+        let hasStockButtons = inStockKeywords.some(keyword => pageText.includes(keyword)) || 
+                                $('#add-to-cart-button').length > 0 || 
+                                htmlContent.includes('submit.add-to-cart');
+
+        // FORCE BUY BACKUP: Agar page text mein directly 'add to cart' ya 'buy now' hai, toh system block filter ko check karke trigger marega
+        if (htmlContent.includes('add-to-cart') && !pageText.includes('currently unavailable')) {
+            isUnavailable = false;
+            hasStockButtons = true;
+        }
+
+        // 4. Final Verification
         if (!isUnavailable && hasStockButtons) {
             itemConfig.lastStatus = 'in_stock';
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai Amazon pr stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`,
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
-            ).catch(e => console.log("Telegram Rate Limit handling."));
+            ).catch(e => console.log("Telegram Limit Safeguard."));
         } else {
             if (itemConfig.lastStatus === 'in_stock') {
                 itemConfig.lastStatus = 'out_of_stock';
                 await bot.telegram.sendMessage(chatId, `⚠️ **ALERT: Amazon Stock Over!**\n\nAmazon product ab wapas Out of Stock ho chuka hai.\nLink: ${targetUrl}`, { disable_web_page_preview: true });
             }
         }
-    } catch (e) { console.log(`[Amazon Engine] Network fetch skipped, retrying next loop...`); }
+    } catch (e) { 
+        console.log(`[Amazon Engine] Connection reset by peer or server timeout. Retrying next cycle...`); 
+    }
 }
 
-bot.launch().then(() => console.log("Amazon Custom Pattern Engine Live..."));
+bot.launch().then(() => console.log("Amazon Ultimate Anti-Block Engine Activated..."));
