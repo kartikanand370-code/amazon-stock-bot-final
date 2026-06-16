@@ -1,6 +1,7 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const express = require('express'); // Render web service ke liye zaroori hai
 
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
@@ -16,6 +17,12 @@ const HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept-Language': 'en-US,en;q=0.9'
 };
+
+// Render par Timeout / Port Errors ko rokne ke liye Dummy Web Server
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Bot is strictly alive and running!'));
+app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
 // Middleware: Access Controller
 bot.use(async (ctx, next) => {
@@ -91,7 +98,7 @@ async function checkAmazonStock(ctx, chatId, targetUrl, intervalId) {
         const availabilityText = $('#availability').text().trim().toLowerCase();
         const addToCartBtn = $('#add-to-cart-button').length;
         if (!availabilityText.includes('currently unavailable') && (availabilityText.includes('in stock') || addToCartBtn > 0)) {
-            // High priority keyword added for sound mapping
+            // High priority keyword for ringtone trigger
             await bot.telegram.sendMessage(chatId, `🚨 STOCK AAGYA 🚨\n\n🔥 bhai stock aagya jldi lga jake 🔥\n\nLink:\n${targetUrl}`);
             clearInterval(intervalId);
             if (activeUsers[chatId]) {
@@ -101,4 +108,4 @@ async function checkAmazonStock(ctx, chatId, targetUrl, intervalId) {
     } catch (e) { console.error(`Scraping error:`, e.message); }
 }
 
-bot.launch().then(() => console.log("Bot running..."));
+bot.launch().then(() => console.log("Bot running successfully..."));
