@@ -14,16 +14,20 @@ const activeUsers = {};
 const approvedUsers = new Set([ADMIN_CHAT_ID.toString()]);
 const userNames = { [ADMIN_CHAT_ID.toString()]: "Admin (Aap)" };
 
-const HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept-Language': 'en-US,en;q=0.9'
-};
+// Rotation ke liye multiple browser agents taaki Amazon pakad na sake
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+];
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot is strictly alive and running!'));
+app.get('/', (req, res) => res.send('Amazon Bot is strictly alive and running!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
+// Middleware: Access Controller
 bot.use(async (ctx, next) => {
     if (!ctx.from) return;
     const userId = ctx.from.id.toString();
@@ -141,8 +145,20 @@ async function checkAmazonStock(ctx, chatId, targetUrl) {
     const itemIndex = activeUsers[chatId].findIndex(item => item.url === targetUrl);
     if (itemIndex === -1) return;
 
+    const randomAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
     try {
-        const response = await axios.get(targetUrl, { headers: HEADERS });
+        const response = await axios.get(targetUrl, { 
+            headers: {
+                'User-Agent': randomAgent,
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Device-Memory': '8',
+                'Downlink': '10'
+            },
+            timeout: 8000 // 8 second timeout to prevent hanging requests
+        });
+        
         const $ = cheerio.load(response.data);
         const availabilityText = $('#availability').text().trim().toLowerCase();
         const addToCartBtn = $('#add-to-cart-button').length;
@@ -152,7 +168,10 @@ async function checkAmazonStock(ctx, chatId, targetUrl) {
                 Markup.inlineKeyboard([[Markup.button.callback('Stop Tracking 🛑', `stop_url_${itemIndex}`)]])
             );
         }
-    } catch (e) { console.error(`Scraping error:`, e.message); }
+    } catch (e) { 
+        // Anti-crash: network drop ya proxy block hone par silent error handling
+        console.log(`[Amazon Bypass] Request blocked or timed out, retrying in next 10s...`); 
+    }
 }
 
-bot.launch().then(() => console.log("Amazon Bot updated successfully..."));
+bot.launch().then(() => console.log("Amazon Bot anti-crash system deployed..."));
