@@ -2,22 +2,11 @@ const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const express = require('express');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7892802862:AAGZd5_xEITGVLJfpjl1cAxyEIW-B7KiZ5s'; 
 const ADMIN_CHAT_ID = '7485181331'; 
 const CHECK_INTERVAL = 15000; // Strict 15 Seconds
-
-// 🌐 WEBSHARE PROXY INTEGRATION (Screenshot se locked)
-const PROXY_HOST = '38.154.203.95'; 
-const PROXY_PORT = '5863';
-const PROXY_USER = 'kboilrra';
-const PROXY_PASS = 'd15npnesdzya';
-
-// Secure Proxy Proxy Connection Build
-const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
-const proxyAgent = new HttpsProxyAgent(proxyUrl);
 // ---------------------
 
 const bot = new Telegraf(BOT_TOKEN);
@@ -26,14 +15,14 @@ const activeUsers = {};
 global.amazonApprovedList = global.amazonApprovedList || [ADMIN_CHAT_ID.toString()];
 
 const USER_AGENTS = [
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/605.1.15',
-    'Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0'
 ];
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Amazon Proxy-Engine is safely running!'));
+app.get('/', (req, res) => res.send('Amazon Original Engine is Online!'));
 app.listen(PORT, () => console.log(`Web server listening on port ${PORT}`));
 
 function checkAmazonAccess(ctx) {
@@ -66,7 +55,7 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery();
 });
 
-// --- ADMIN COMMANDS ---
+// --- ADMIN CONTROL ---
 bot.command('approve', (ctx) => {
     if (ctx.from.id.toString() !== ADMIN_CHAT_ID.toString()) return ctx.reply("❌ Strict Admin Only!");
     const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
@@ -77,7 +66,7 @@ bot.command('approve', (ctx) => {
         global.amazonApprovedList.push(targetUserId);
         ctx.reply(`✅ Success! User ID \`${targetUserId}\` approved.`);
         bot.telegram.sendMessage(targetUserId, "🥳 Approved! Use: `/start_track <Amazon_URL>`");
-    } else { ctx.reply("⚠️ Yeh user pehle se approved hai."); }
+    } else { ctx.reply("⚠️ User pehle se approved hai."); }
 });
 
 bot.command('remove_user', (ctx) => {
@@ -101,7 +90,7 @@ bot.command('remove_user', (ctx) => {
 // --- USER COMMANDS ---
 bot.start((ctx) => {
     if (!checkAmazonAccess(ctx)) return;
-    ctx.reply("🤖 Amazon Proxy-Secured Bot Active!\n\n🔹 `/start_track <URL>` - Track product\n🔹 `/list` - View active links\n🔹 `/stop_track <URL>` - Stop specific link\n🔹 `/remove_all` - Stop everything");
+    ctx.reply("🤖 Amazon Tracker Bot Active!\n\n🔹 `/start_track <URL>`\n🔹 `/list_track`\n🔹 `/stop_all`");
 });
 
 bot.command('start_track', async (ctx) => {
@@ -109,7 +98,6 @@ bot.command('start_track', async (ctx) => {
     const chatId = ctx.chat.id.toString();
     const args = ctx.message.text.replace(/\n/g, ' ').split(' ').filter(arg => arg.trim() !== '');
     const amazonLink = args.find(arg => arg.includes('amazon.') || arg.includes('amzn.in'));
-    
     if (!amazonLink) return ctx.reply("❌ Valid Amazon link bhejo!");
     if (!activeUsers[chatId]) activeUsers[chatId] = [];
     if (activeUsers[chatId].some(item => item.url === amazonLink)) return ctx.reply("⚠️ Pehle se track ho raha hai!");
@@ -122,7 +110,7 @@ bot.command('start_track', async (ctx) => {
     checkAmazonStock(ctx, chatId, amazonLink, itemConfig);
 });
 
-bot.command('list', (ctx) => {
+bot.command('list_track', (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     const chatId = ctx.chat.id.toString();
     if (!activeUsers[chatId] || activeUsers[chatId].length === 0) return ctx.reply("😴 Koyi active tracking nahi hai.");
@@ -131,34 +119,17 @@ bot.command('list', (ctx) => {
     ctx.reply(msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
 });
 
-bot.command('stop_track', (ctx) => {
-    if (!checkAmazonAccess(ctx)) return;
-    const chatId = ctx.chat.id.toString();
-    const args = ctx.message.text.split(' ').filter(arg => arg.trim() !== '');
-    if (args.length < 2) return ctx.reply("⚠️ Format: `/stop_track <Amazon_URL>`");
-    
-    const targetUrl = args[1].trim();
-    if (!activeUsers[chatId]) return ctx.reply("😴 Koyi active tracking nahi hai.");
-    
-    const index = activeUsers[chatId].findIndex(item => item.url === targetUrl);
-    if (index > -1) {
-        clearInterval(activeUsers[chatId][index].interval);
-        activeUsers[chatId].splice(index, 1);
-        ctx.reply("🛑 Is product ki tracking band kar di gayi hai.");
-    } else { ctx.reply("⚠️ Yeh URL active list mein nahi mila."); }
-});
-
-bot.command('remove_all', (ctx) => {
+bot.command('stop_all', (ctx) => {
     if (!checkAmazonAccess(ctx)) return;
     const chatId = ctx.chat.id.toString();
     if (activeUsers[chatId] && activeUsers[chatId].length > 0) {
         activeUsers[chatId].forEach(item => clearInterval(item.interval));
         delete activeUsers[chatId];
-        ctx.reply("🛑 Saari active tracking links mita di gayi hain.");
+        ctx.reply("🛑 Saari tracking band kar di gayi.");
     } else { ctx.reply("⚠️ Koyi active tracking nahi mili."); }
 });
 
-// --- CORE PROXY BYPASS ENGINE ---
+// --- ORIGINAL TRACKING CORE ---
 async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
     if (!activeUsers[chatId]) return;
     const itemIndex = activeUsers[chatId].findIndex(item => item.url === targetUrl);
@@ -168,29 +139,21 @@ async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
 
     try {
         const response = await axios.get(targetUrl, { 
-            httpsAgent: proxyAgent, // Ab request proxy ke raaste jaegi
             headers: { 
                 'User-Agent': randomAgent, 
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Connection': 'keep-alive'
+                'Accept-Language': 'en-US,en;q=0.9'
             }, 
-            timeout: 9000 
+            timeout: 8000 
         });
         
         const $ = cheerio.load(response.data);
-        const htmlContent = $('body').html() || '';
         const pageText = $('body').text().toLowerCase();
         
-        if (pageText.includes('enter the characters you see below') || htmlContent.includes('captcha')) {
-            console.log(`[Amazon Proxy] Captcha wall detected, waiting for next rotation...`);
-            return;
-        }
-
         const isUnavailable = pageText.includes('currently unavailable') || 
                              pageText.includes('out of stock') || 
-                             pageText.includes('available from these sellers');
-                             
+                             pageText.includes('available from these sellers') ||
+                             $('#availability').text().toLowerCase().includes('currently unavailable');
+        
         const hasStockButtons = pageText.includes('add to cart') || 
                                 pageText.includes('buy now') || 
                                 $('#add-to-cart-button').length > 0;
@@ -206,7 +169,7 @@ async function checkAmazonStock(ctx, chatId, targetUrl, itemConfig) {
                 await bot.telegram.sendMessage(chatId, `⚠️ **ALERT: Amazon Stock Over!**\n\nAmazon product ab wapas Out of Stock ho chuka hai.\nLink: ${targetUrl}`, { disable_web_page_preview: true });
             }
         }
-    } catch (e) { console.log(`[Amazon Proxy] Network timeout or connection refresh.`); }
+    } catch (e) { console.log(`[Amazon Engine] Retrying...`); }
 }
 
-bot.launch().then(() => console.log("Amazon Bot running securely via Webshare Proxy..."));
+bot.launch().then(() => console.log("Amazon Original Setup Restored..."));
